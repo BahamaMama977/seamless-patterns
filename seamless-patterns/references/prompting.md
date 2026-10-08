@@ -26,12 +26,30 @@ No frame. Output one tile, not a grid or a mockup of repeated tiles.
 
 Фразы можно менять. Не считай конкретные слова обязательным переключателем режима tiling.
 
+## Узор по референсу
+
+Сначала выполни разбор по [reference-matching.md](reference-matching.md). Включи в промпт состав мотивов, тональные планы, признаки техники и отношения в композиции; приложи сам образец по [codex-imagegen.md](codex-imagegen.md). Общего «сохрани стиль» недостаточно. Если пользователь просит только палитру из образца, не навязывай ему остальные свойства.
+
+Пример дополнения для конкретного образца со снежинками; не применяй его к другим рисункам по умолчанию:
+
+```text
+Use the attached image as the reference for motif shapes, painting technique,
+tonal hierarchy and repeat rhythm. Preserve both the more visible pale-blue
+snowflakes and the nearly white snowflakes between them on the white ground.
+Keep the thin, slightly irregular branches, small crystal details, broken
+watercolor strokes, uneven pigment and white gaps within the crystals.
+Keep the background snowflakes faint but visible on the intended ground.
+Preserve the relative motif scale, spacing and alternation in the reference;
+do not replace the branches with broad uniform facets or equalize the contrast
+of all snowflakes. [Apply only the changes explicitly requested by the user.]
+```
+
 ## Мотив для локальной сборки
 
 Для композиции из отдельных объектов проси целый мотив с настоящим прозрачным фоном. Периодичность будет обеспечиваться локальными переносами по [periodic-composition.md](periodic-composition.md); отдельная роза не должна сама выглядеть тайлом.
 
 ```text
-Create one complete [motif] in [style], using [palette], as a clean cutout
+Create one complete [motif] in [style], using [palette], as a complete cutout
 with true alpha transparency. Preserve all petals, stems and leaves within
 the image, with transparent space around the complete silhouette.
 [Local shading appropriate to the style.] No white plate, checkerboard,
@@ -39,6 +57,8 @@ frame, text or mockup. No detached cast shadow unless explicitly wanted.
 ```
 
 Используй `transparent_background`, когда он доступен в схеме. Визуальная имитация прозрачности непригодна. Для нескольких мотивов сохраняй согласованный стиль и палитру, но не превращай их в одинаковые копии, если рисунку нужна вариативность. Масштаб и поворот при сборке не должны ухудшать вид исходных деталей.
+
+По референсу приложи образец и опиши, какой вариант и тональный план должен представлять этот мотив. Прозрачная подложка не требует сглаживать контуры, выравнивать мазки или удалять белые детали рисунка. До сборки сравни мотив с образцом на целевом фоне.
 
 ## Тесселяция с прилегающими фигурами
 

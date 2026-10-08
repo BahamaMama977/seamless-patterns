@@ -39,6 +39,9 @@ class ExactCopyTests(unittest.TestCase):
         self.assertEqual(report["visual_review"]["status"], "pending")
         self.assertEqual(report["visual_review"]["repeat_distribution"], "pending")
         self.assertEqual(report["visual_review"]["defects"], [])
+        self.assertEqual(report["reference_review"]["status"], "pending")
+        self.assertEqual(report["reference_review"]["references"], [])
+        self.assertEqual(report["reference_review"]["defects"], [])
         self.assertEqual(len(report["crops"]), 8)
         width, height = tile.size
         self.assertEqual(report["geometry"]["vertical_seams_x"], [width, 2 * width])

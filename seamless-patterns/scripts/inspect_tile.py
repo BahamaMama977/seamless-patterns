@@ -271,6 +271,16 @@ def inspect_tile(source, output_dir, context=64, background=None):
                 "Open the preview, all seam crops and all four junction crops."
             ],
         },
+        "reference_review": {
+            "status": "pending", "references": [],
+            "motifs_and_layers": "pending", "artistic_style": "pending",
+            "palette_and_contrast": "pending", "scale_density_and_rhythm": "pending",
+            "viewing_scale": None, "defects": [],
+            "limitations": [
+                "Reference similarity is not automatically evaluated. Compare with the supplied "
+                "reference images, or mark not_applicable when no reference matching was requested."
+            ],
+        },
     }
     report_path = output_dir / "inspection.json"
     report_path.write_text(

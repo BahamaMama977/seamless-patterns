@@ -63,6 +63,71 @@ class CompositionTests(unittest.TestCase):
         self.assertTrue(report["assembly"]["pixel_exact_copies_verified"])
         self.assertEqual(report["visual_review"]["repeat_distribution"], "pending")
         self.assertEqual(report["diagnostics"]["background_distribution"]["verdict"], "not_assessed")
+        self.assertEqual(report["reference_review"]["status"], "pending")
+
+    def test_opacity_preserves_source_alpha_and_rgb_across_corners(self):
+        source = Image.new("RGBA", (4, 4), (40, 100, 180, 128))
+        before = source.tobytes()
+        assets = {"shape": {"image": source}}
+        item = {"asset_id": "shape", "x": 0, "y": 0, "size_px": 4, "opacity": 0.5}
+        transparent, _ = composer.render_placements(assets, [item], 9, 7, (0, 0, 0, 0))
+        white, _ = composer.render_placements(assets, [item], 9, 7, (255, 255, 255, 255))
+        visible = {(x % 9, y % 7) for y in range(-2, 2) for x in range(-2, 2)}
+        for y in range(7):
+            for x in range(9):
+                if (x, y) in visible:
+                    self.assertEqual(transparent.getpixel((x, y)), (40, 100, 180, 64))
+                    self.assertEqual(white.getpixel((x, y)), (201, 216, 236, 255))
+                else:
+                    self.assertEqual(transparent.getpixel((x, y)), (0, 0, 0, 0))
+                    self.assertEqual(white.getpixel((x, y)), (255, 255, 255, 255))
+        default, _ = composer.render_placements(assets, [dict(item, opacity=1)], 9, 7, (0, 0, 0, 0))
+        without_opacity = dict(item)
+        del without_opacity["opacity"]
+        legacy, _ = composer.render_placements(assets, [without_opacity], 9, 7, (0, 0, 0, 0))
+        self.assertEqual(default.tobytes(), legacy.tobytes())
+        self.assertEqual(default.getpixel((0, 0)), (40, 100, 180, 128))
+        hidden, _ = composer.render_placements(assets, [dict(item, opacity=0)], 9, 7, (255, 255, 255, 255))
+        self.assertEqual(hidden.tobytes(), Image.new("RGBA", (9, 7), "white").tobytes())
+        self.assertEqual(source.tobytes(), before)
+
+    def test_opacity_and_layer_order_survive_replay(self):
+        config = json.loads(json.dumps(self.config))
+        del config["layout"]
+        config["placements"] = [
+            {"asset_id": "motif", "x": 0, "y": 0, "size_px": 17, "rotation_deg": 31, "opacity": 0.2},
+            {"asset_id": "motif", "x": 2, "y": 1, "size_px": 13},
+        ]
+        manifest, folder = self.run_config("tonal-planes", config)
+        self.assertEqual([item["opacity"] for item in manifest["placements"]], [0.2, 1])
+        replay = json.loads((folder / "replay-config.json").read_text(encoding="utf-8"))
+        self.assertEqual([item["opacity"] for item in replay["placements"]], [0.2, 1])
+        result = composer.compose_pattern(folder / "replay-config.json", self.work / "tonal-replay")
+        self.assertEqual((folder / "tile.png").read_bytes(), (result.parent / "tile.png").read_bytes())
+        assets = {
+            "red": {"image": Image.new("RGBA", (1, 1), (255, 0, 0, 255))},
+            "blue": {"image": Image.new("RGBA", (1, 1), (0, 0, 255, 255))},
+        }
+        items = [
+            {"asset_id": "red", "x": 0, "y": 0, "size_px": 1, "opacity": 128 / 255},
+            {"asset_id": "blue", "x": 0, "y": 0, "size_px": 1, "opacity": 64 / 255},
+        ]
+        forward, _ = composer.render_placements(assets, items, 3, 3, (255, 255, 255, 255))
+        reverse, _ = composer.render_placements(assets, list(reversed(items)), 3, 3, (255, 255, 255, 255))
+        self.assertEqual(forward.getpixel((0, 0)), (191, 95, 159, 255))
+        self.assertEqual(reverse.getpixel((0, 0)), (223, 95, 127, 255))
+
+    def test_invalid_opacity_fails_before_creating_output(self):
+        for index, value in enumerate((-0.1, 1.1, True, "0.2", None, float("nan"), float("inf"))):
+            config = json.loads(json.dumps(self.config))
+            del config["layout"]
+            config["placements"] = [
+                {"asset_id": "motif", "x": 0, "y": 0, "size_px": 8, "opacity": value}
+            ]
+            name = f"bad-opacity-{index}"
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "placement.opacity"):
+                self.run_config(name, config)
+            self.assertFalse((self.work / name).exists())
 
     def test_corner_crossing_rotation_large_motifs_and_layer_order_match_infinite_field(self):
         # Independent reference: draw many translated motifs on a larger canvas,
@@ -259,6 +324,15 @@ class ObjectSpacingTests(unittest.TestCase):
                      {'min_gap_px':0,'alpha_threshold':256},{'min_gap_px':0,'extra':1}]:
             with self.subTest(spec=spec), self.assertRaises(ValueError):
                 composer.ObjectSpacing(30,30,spec)
+
+    def test_spacing_uses_alpha_after_placement_opacity(self):
+        assets = self.assets(Image.new("RGBA", (1, 1), (255, 255, 255, 255)))
+        items = [dict(self.item(0, 0, 1), opacity=0.5), self.item(0, 0, 1)]
+        with self.assertRaisesRegex(ValueError, "placement 1"):
+            composer.render_placements(assets, items, 7, 5, (0, 0, 0, 0), {"min_gap_px": 0})
+        tile, _ = composer.render_placements(assets, items, 7, 5, (0, 0, 0, 0),
+                                            {"min_gap_px": 0, "alpha_threshold": 129})
+        self.assertEqual(tile.getpixel((0, 0)), (255, 255, 255, 255))
 
     def test_impossible_layout_fails_without_reducing_count(self):
         image = Image.new('RGBA',(5,5),(0,0,0,255))

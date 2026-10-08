@@ -22,7 +22,7 @@ except ImportError:
 from inspect_tile import inspect_tile, sha256
 
 
-RENDERER = "seamless-patterns-pillow-v2"
+RENDERER = "seamless-patterns-pillow-v3"
 
 
 def integer(value, label, minimum=None):
@@ -263,7 +263,7 @@ def render_placements(assets, placements, width, height, background, object_spac
     clearance = ObjectSpacing(width, height, object_spacing) if object_spacing is not None else None
     # Preserve layer order: all wrapped copies of one motif precede the next motif.
     for item in placements:
-        only_keys(item, ("asset_id", "x", "y", "size_px", "rotation_deg"), "placement")
+        only_keys(item, ("asset_id", "x", "y", "size_px", "rotation_deg", "opacity"), "placement")
         asset_id = item.get("asset_id")
         if not isinstance(asset_id, str) or asset_id not in assets:
             raise ValueError(f"Unknown placement asset: {asset_id}")
@@ -271,7 +271,15 @@ def render_placements(assets, placements, width, height, background, object_spac
         y = integer(item.get("y"), "placement.y") % height
         size = integer(item.get("size_px"), "placement.size_px", 1)
         angle = number(item.get("rotation_deg", 0), "placement.rotation_deg")
+        opacity = number(item.get("opacity", 1), "placement.opacity", 0)
+        if opacity > 1:
+            raise ValueError("placement.opacity must be between 0 and 1")
         motif = prepare_motif(assets[asset_id]["image"], size, angle)
+        if opacity != 1:
+            # Scale existing alpha once; preserve RGB, including white details.
+            motif.putalpha(motif.getchannel("A").point([
+                int(value * opacity + 0.5) for value in range(256)
+            ]))
         if clearance is not None and not clearance.try_add(motif, x, y):
             raise ValueError(f"Object spacing violated at placement {len(resolved)}: check sizes, rotation, gap and periodic neighbors")
         left, top = x - motif.width // 2, y - motif.height // 2
@@ -281,7 +289,7 @@ def render_placements(assets, placements, width, height, background, object_spac
             tile.alpha_composite(motif, dest=origin)
         resolved.append({
             "asset_id": asset_id, "x": x, "y": y, "size_px": size,
-            "rotation_deg": angle, "raster_size": list(motif.size),
+            "rotation_deg": angle, "opacity": opacity, "raster_size": list(motif.size),
             "raster_sha256": hashlib.sha256(motif.tobytes()).hexdigest(),
             "origins_xy": [list(origin) for origin in origins],
         })
@@ -319,7 +327,7 @@ def compose_pattern(config_path, output_dir):
             for key, asset in assets.items()
         ],
         "placements": [
-            {key: item[key] for key in ("asset_id", "x", "y", "size_px", "rotation_deg")}
+            {key: item[key] for key in ("asset_id", "x", "y", "size_px", "rotation_deg", "opacity")}
             for item in resolved
         ],
     }
@@ -346,7 +354,7 @@ def compose_pattern(config_path, output_dir):
         "renderer": {
             "id": RENDERER, "script_sha256": sha256(Path(__file__)),
             "python": platform.python_version(), "pillow": PILLOW_VERSION,
-            "transforms": "trim transparent exterior; LANCZOS resize; BICUBIC expanded rotation; integer source-over wrapping",
+            "transforms": "trim transparent exterior; LANCZOS resize; BICUBIC expanded rotation; rounded alpha multiplication by placement opacity; integer source-over wrapping",
         },
         "request_config": config, "replay_config": replay_path.name,
         "assets": [
@@ -360,6 +368,7 @@ def compose_pattern(config_path, output_dir):
         "visual_review_status": "pending",
         "limitations": [
             "Periodic placement does not prove visually even distribution or attractive repetition.",
+            "Opacity controls compositing, not artistic style or reference similarity.",
             "Seed controls local placement only, not image generation.",
             "Pixel reproducibility also requires the recorded renderer/runtime and unchanged assets.",
         ],
